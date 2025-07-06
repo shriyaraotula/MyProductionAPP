@@ -1,31 +1,24 @@
 # app/main.py
+import threading
+from datetime import timedelta
+from typing import List
+from dotenv import load_dotenv
+from fastapi import Depends, FastAPI, HTTPException, status
+from fastapi.openapi.utils import get_openapi
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from jose import JWTError, jwt
-from datetime import timedelta
-from fastapi import FastAPI, Depends,HTTPException,status
 from sqlalchemy.orm import Session
-from fastapi import FastAPI, Depends
-from fastapi.security import OAuth2PasswordBearer
-from fastapi.openapi.models import OAuthFlows as OAuthFlowsModel
-from fastapi.openapi.models import OAuth2 as OAuth2Model
-from fastapi.openapi.utils import get_openapi
-from fastapi.security import OAuth2PasswordBearer
-from . import models, schemas, crud, utils , auth
-from .auth import verify_password, get_password_hash, create_access_token, SECRET_KEY, ALGORITHM
-
-from .database import SessionLocal, engine, Base
-from typing import List
-from .schemas import OrderCreate
-from .kafka.producer import send_order_to_kafka
-import threading
-from .kafka.consumer import start_consumer
-
-from dotenv import load_dotenv
-load_dotenv()
-from .wait_for_db import  wait_for_postgres
 import os
+from .schemas import OrderCreate
+from .wait_for_db import wait_for_postgres
+from . import crud, models, schemas
+from .auth import (ALGORITHM, SECRET_KEY, create_access_token,
+                   get_password_hash, verify_password)
+from .database import Base, SessionLocal, engine
+from .kafka.consumer import start_consumer
+from .kafka.producer import send_order_to_kafka
+load_dotenv()
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
-
 wait_for_postgres(
     host=os.getenv("DB_HOST", "localhost"),
     db=os.getenv("POSTGRES_DB"),
@@ -38,11 +31,13 @@ Base.metadata.create_all(bind=engine)
 
 app = FastAPI()
 
+
 @app.get("/health")
 def health_check():
     return {"status": "ok"}
 
-#oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
+
+# oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 # Dependency to get DB session
 def get_db():
     db = SessionLocal()
@@ -50,6 +45,7 @@ def get_db():
         yield db
     finally:
         db.close()
+
 
 def custom_openapi():
     if app.openapi_schema:
@@ -73,22 +69,29 @@ def custom_openapi():
     app.openapi_schema = openapi_schema
     return app.openapi_schema
 
+
 app.openapi = custom_openapi
+
 
 @app.get("/protected")
 def read_protected(token: str = Depends(oauth2_scheme)):
     # You can add logic to verify token here
     return {"token": token}
 
+
 @app.post("/items/", response_model=schemas.ItemOut)
 def create_item(item: schemas.ItemCreate, db: Session = Depends(get_db)):
     return crud.create_item(db, item)
+
 
 @app.get("/items/", response_model=List[schemas.ItemOut])
 def read_items(db: Session = Depends(get_db)):
     return crud.get_items(db)
 
-def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
+
+def get_current_user(
+    token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)
+):
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
@@ -106,6 +109,7 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
         raise credentials_exception
     return user
 
+
 @app.post("/register")
 def register(user: schemas.UserCreate, db: Session = Depends(get_db)):
     db_user = db.query(models.User).filter(models.User.email == user.email).first()
@@ -118,23 +122,28 @@ def register(user: schemas.UserCreate, db: Session = Depends(get_db)):
     db.refresh(new_user)
     return {"msg": "User registered"}
 
+
 @app.post("/login", response_model=schemas.Token)
-def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+def login(
+    form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)
+):
     user = db.query(models.User).filter(models.User.email == form_data.username).first()
     if not user or not verify_password(form_data.password, user.hashed_password):
         raise HTTPException(status_code=400, detail="Invalid credentials")
     access_token_expires = timedelta(minutes=30)
-    access_token = create_access_token(data={"sub": user.email}, expires_delta=access_token_expires)
+    access_token = create_access_token(
+        data={"sub": user.email}, expires_delta=access_token_expires
+    )
     return {"access_token": access_token, "token_type": "bearer"}
+
 
 @app.post("/order")
 def place_order(order: OrderCreate):
     send_order_to_kafka(order.dict())
     return {"status": "queued", "order_id": order.order_id}
 
+
 @app.on_event("startup")
 def start_kafka_consumer():
     thread = threading.Thread(target=start_consumer, daemon=True)
     thread.start()
-
-
