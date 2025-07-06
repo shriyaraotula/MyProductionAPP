@@ -22,3 +22,7 @@ class UserLogin(BaseModel):
 class Token(BaseModel):
     access_token: str
     token_type: str
+
+class OrderCreate(BaseModel):
+    order_id: str
+    quantity: int

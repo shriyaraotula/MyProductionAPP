@@ -9,3 +9,4 @@ venv/
 postgres_data/
 .DS_Store
 *.log
+.env

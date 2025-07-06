@@ -12,15 +12,20 @@ from fastapi.openapi.utils import get_openapi
 from fastapi.security import OAuth2PasswordBearer
 from . import models, schemas, crud, utils , auth
 from .auth import verify_password, get_password_hash, create_access_token, SECRET_KEY, ALGORITHM
-from .wait_for_db import  wait_for_postgres
-import os
+
 from .database import SessionLocal, engine, Base
 from typing import List
+from .schemas import OrderCreate
+from .kafka.producer import send_order_to_kafka
+import threading
+from .kafka.consumer import start_consumer
 
-
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 from dotenv import load_dotenv
 load_dotenv()
+from .wait_for_db import  wait_for_postgres
+import os
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+
 wait_for_postgres(
     host=os.getenv("DB_HOST", "localhost"),
     db=os.getenv("POSTGRES_DB"),
@@ -30,8 +35,12 @@ wait_for_postgres(
 )
 Base.metadata.create_all(bind=engine)
 
+
 app = FastAPI()
 
+@app.get("/health")
+def health_check():
+    return {"status": "ok"}
 
 #oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 # Dependency to get DB session
@@ -117,4 +126,15 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
     access_token_expires = timedelta(minutes=30)
     access_token = create_access_token(data={"sub": user.email}, expires_delta=access_token_expires)
     return {"access_token": access_token, "token_type": "bearer"}
+
+@app.post("/order")
+def place_order(order: OrderCreate):
+    send_order_to_kafka(order.dict())
+    return {"status": "queued", "order_id": order.order_id}
+
+@app.on_event("startup")
+def start_kafka_consumer():
+    thread = threading.Thread(target=start_consumer, daemon=True)
+    thread.start()
+
 
