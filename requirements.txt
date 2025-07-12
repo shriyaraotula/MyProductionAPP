@@ -35,4 +35,4 @@ zipp==3.20.2
 redis
 kafka-python
 pytest
-
+httpx
