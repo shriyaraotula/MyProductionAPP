@@ -75,7 +75,7 @@ app.openapi = custom_openapi
 
 @app.get("/protected")
 def read_protected(token: str = Depends(oauth2_scheme)):
-    # You can add logic to verify token here
+    # You  can add logic as to verify token here
     return {"token": token}
 
 
