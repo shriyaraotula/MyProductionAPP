@@ -26,35 +26,40 @@ jobs:
           --health-retries=5
 
     steps:
-      - name: 🛎️ Checkout code
+      - name: Checkout code
         uses: actions/checkout@v3
 
-      - name: 🐍 Set up Python
+      - name: Set up Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.11'
 
-      - name: 📦 Install dependencies
+      - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: 🔍 Lint with flake8
+      - name: Lint with flake8
         run: |
           pip install flake8
           flake8 .
 
-      - name: ✅ Run unit tests (disable Kafka)
-        run: ENABLE_KAFKA=0 pytest --disable-warnings
+      - name: Run tests with pytest
+        env:
+          ENABLE_KAFKA: 0
+          DB_HOST: localhost
+          DB_PORT: 5432
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: Plmoknijb1234
+          POSTGRES_DB: myappdb
+          DATABASE_URL: postgresql://postgres:Plmoknijb1234@localhost:5432/myappdb
+        run: pytest --disable-warnings
 
-      - name: 🐳 Build Docker image
-        run: docker build -t leetcode-web .
-
-      - name: 🔐 Log in to Docker Hub
+      - name: Log in to Docker Hub
         run: echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
 
-      - name: 📤 Build Docker Image with Tag
+      - name: Build Docker Image
         run: docker build -t ${{ secrets.DOCKER_USERNAME }}/myproductionapp:latest .
 
-      - name: 🚀 Push to Docker Hub
+      - name: Push to Docker Hub
         run: docker push ${{ secrets.DOCKER_USERNAME }}/myproductionapp:latest
