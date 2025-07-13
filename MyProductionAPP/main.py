@@ -1,5 +1,7 @@
 # app/main.py
+
 import threading
+import os
 from datetime import timedelta
 from typing import List
 from dotenv import load_dotenv
@@ -8,17 +10,27 @@ from fastapi.openapi.utils import get_openapi
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from jose import JWTError, jwt
 from sqlalchemy.orm import Session
-import os
+
 from .schemas import OrderCreate
 from .wait_for_db import wait_for_postgres
 from . import crud, models, schemas
-from .auth import (ALGORITHM, SECRET_KEY, create_access_token,
-                   get_password_hash, verify_password)
+from .auth import (
+    ALGORITHM, SECRET_KEY, create_access_token,
+    get_password_hash, verify_password
+)
 from .database import Base, SessionLocal, engine
-from .kafka.consumer import start_consumer
-from .kafka.producer import send_order_to_kafka
+
 load_dotenv()
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+
+# === Optional Kafka ===
+ENABLE_KAFKA = os.getenv("ENABLE_KAFKA", "1") == "1"
+if ENABLE_KAFKA:
+    from .kafka.consumer import start_consumer
+    from .kafka.producer import send_order_to_kafka
+else:
+    def send_order_to_kafka(_): pass
+
+# === DB Setup ===
 wait_for_postgres(
     host=os.getenv("DB_HOST", "localhost"),
     db=os.getenv("POSTGRES_DB"),
@@ -28,8 +40,9 @@ wait_for_postgres(
 )
 Base.metadata.create_all(bind=engine)
 
-
 app = FastAPI()
+
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
 
 @app.get("/health")
@@ -37,8 +50,7 @@ def health_check():
     return {"status": "ok"}
 
 
-# oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
-# Dependency to get DB session
+# === DB Dependency ===
 def get_db():
     db = SessionLocal()
     try:
@@ -47,6 +59,7 @@ def get_db():
         db.close()
 
 
+# === OpenAPI Auth Header ===
 def custom_openapi():
     if app.openapi_schema:
         return app.openapi_schema
@@ -75,7 +88,6 @@ app.openapi = custom_openapi
 
 @app.get("/protected")
 def read_protected(token: str = Depends(oauth2_scheme)):
-    # You  can add logic as to verify token here
     return {"token": token}
 
 
@@ -124,9 +136,7 @@ def register(user: schemas.UserCreate, db: Session = Depends(get_db)):
 
 
 @app.post("/login", response_model=schemas.Token)
-def login(
-    form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)
-):
+def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
     user = db.query(models.User).filter(models.User.email == form_data.username).first()
     if not user or not verify_password(form_data.password, user.hashed_password):
         raise HTTPException(status_code=400, detail="Invalid credentials")
@@ -145,6 +155,6 @@ def place_order(order: OrderCreate):
 
 @app.on_event("startup")
 def start_kafka_consumer():
-    if os.getenv("ENABLE_KAFKA", "1") == "1":
+    if ENABLE_KAFKA:
         thread = threading.Thread(target=start_consumer, daemon=True)
         thread.start()
