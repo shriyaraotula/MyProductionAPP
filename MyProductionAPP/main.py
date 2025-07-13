@@ -145,5 +145,6 @@ def place_order(order: OrderCreate):
 
 @app.on_event("startup")
 def start_kafka_consumer():
-    thread = threading.Thread(target=start_consumer, daemon=True)
-    thread.start()
+    if os.getenv("ENABLE_KAFKA", "1") == "1":
+        thread = threading.Thread(target=start_consumer, daemon=True)
+        thread.start()
