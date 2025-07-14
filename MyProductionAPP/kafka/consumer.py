@@ -5,6 +5,7 @@ import time
 import uuid
 from kafka import KafkaConsumer
 
+
 def process_order(order):
     print(f"🛒 Processing order: {order}")
     time.sleep(1)
