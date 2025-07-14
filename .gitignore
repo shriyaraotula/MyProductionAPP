@@ -10,3 +10,5 @@ postgres_data/
 .DS_Store
 *.log
 .env
+plan.csv
+SDE_Plan.csv
