@@ -22,4 +22,4 @@ docker-compose up -d
 
 # Or use Docker commands (for production)
 # See deployment commands in docker-compose.monitoring.yml
-EOFF
+
