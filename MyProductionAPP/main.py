@@ -10,9 +10,9 @@ from fastapi.openapi.utils import get_openapi
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from jose import JWTError, jwt
 from sqlalchemy.orm import Session
+from sqlalchemy import text
 
 from .schemas import OrderCreate
-from .wait_for_db import wait_for_postgres
 from . import crud, models, schemas
 from .auth import (
     ALGORITHM, SECRET_KEY, create_access_token,
@@ -25,30 +25,62 @@ load_dotenv()
 # === Optional Kafka ===
 ENABLE_KAFKA = os.getenv("ENABLE_KAFKA", "1") == "1"
 if ENABLE_KAFKA:
-    from .kafka.consumer import start_consumer
-    from .kafka.producer import send_order_to_kafka
+    try:
+        from .kafka.consumer import start_consumer
+        from .kafka.producer import send_order_to_kafka
+    except ImportError:
+        ENABLE_KAFKA = False
+        def send_order_to_kafka(_): pass
 else:
     def send_order_to_kafka(_): pass
 
 # === DB Setup ===
-wait_for_postgres(
-    host=os.getenv("DB_HOST", "localhost"),
-    db=os.getenv("POSTGRES_DB"),
-    user=os.getenv("POSTGRES_USER"),
-    password=os.getenv("POSTGRES_PASSWORD"),
-    port=int(os.getenv("DB_PORT", 5432)),
-)
-Base.metadata.create_all(bind=engine)
+SKIP_DB_WAIT = os.getenv("SKIP_DB_WAIT", "false").lower() == "true"
 
-app = FastAPI()
+if not SKIP_DB_WAIT:
+    try:
+        from .wait_for_db import wait_for_postgres
+        wait_for_postgres(
+            host=os.getenv("DB_HOST", "localhost"),
+            db=os.getenv("POSTGRES_DB", "myappdb"),
+            user=os.getenv("POSTGRES_USER", "postgres"),
+            password=os.getenv("POSTGRES_PASSWORD", "Plmoknijb1234"),
+            port=int(os.getenv("DB_PORT", 5432)),
+        )
+    except Exception as e:
+        if os.getenv("ENVIRONMENT") != "development":
+            raise
+
+try:
+    Base.metadata.create_all(bind=engine)
+except Exception as e:
+    if os.getenv("ENVIRONMENT") != "development":
+        raise
+
+app = FastAPI(title="MyProductionAPP", version="1.0.0")
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
-
 @app.get("/health")
 def health_check():
-    return {"status": "ok"}
-
+    """Health check endpoint with detailed status"""
+    try:
+        # Check database connection
+        db = SessionLocal()
+        db.execute(text("SELECT 1"))
+        db.close()
+        db_status = "healthy"
+    except Exception as e:
+        db_status = f"unhealthy: {str(e)}"
+    
+    health_status = {
+        "status": "ok",
+        "environment": os.getenv("ENVIRONMENT", "production"),
+        "database": db_status,
+        "kafka": "enabled" if ENABLE_KAFKA else "disabled"
+    }
+    
+    return health_status
 
 # === DB Dependency ===
 def get_db():
@@ -57,7 +89,6 @@ def get_db():
         yield db
     finally:
         db.close()
-
 
 # === OpenAPI Auth Header ===
 def custom_openapi():
@@ -78,28 +109,24 @@ def custom_openapi():
     }
     for path in openapi_schema["paths"].values():
         for method in path.values():
-            method["security"] = [{"BearerAuth": []}]
+            if isinstance(method, dict):
+                method["security"] = [{"BearerAuth": []}]
     app.openapi_schema = openapi_schema
     return app.openapi_schema
 
-
 app.openapi = custom_openapi
-
 
 @app.get("/protected")
 def read_protected(token: str = Depends(oauth2_scheme)):
     return {"token": token}
 
-
 @app.post("/items/", response_model=schemas.ItemOut)
 def create_item(item: schemas.ItemCreate, db: Session = Depends(get_db)):
     return crud.create_item(db, item)
 
-
 @app.get("/items/", response_model=List[schemas.ItemOut])
 def read_items(db: Session = Depends(get_db)):
     return crud.get_items(db)
-
 
 def get_current_user(
     token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)
@@ -116,11 +143,10 @@ def get_current_user(
             raise credentials_exception
     except JWTError:
         raise credentials_exception
-    user = db.query(models.User).filter(models.User.email == email).first()
+    user = db.query(models.User).filter(models.User.email == user.email).first()
     if user is None:
         raise credentials_exception
     return user
-
 
 @app.post("/register")
 def register(user: schemas.UserCreate, db: Session = Depends(get_db)):
@@ -134,7 +160,6 @@ def register(user: schemas.UserCreate, db: Session = Depends(get_db)):
     db.refresh(new_user)
     return {"msg": "User registered"}
 
-
 @app.post("/login", response_model=schemas.Token)
 def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
     user = db.query(models.User).filter(models.User.email == form_data.username).first()
@@ -146,12 +171,11 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
     )
     return {"access_token": access_token, "token_type": "bearer"}
 
-
 @app.post("/order")
 def place_order(order: OrderCreate):
-    send_order_to_kafka(order.dict())
-    return {"status": "queued", "order_id": order.order_id}
-
+    if ENABLE_KAFKA:
+        send_order_to_kafka(order.model_dump())
+    return {"status": "queued" if ENABLE_KAFKA else "processed", "order_id": order.order_id}
 
 @app.on_event("startup")
 def start_kafka_consumer():

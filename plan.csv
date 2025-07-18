@@ -1,8 +1,0 @@
-Day,Topic,Resources,Hands-On Task,Completed,Notes
-1,Git & GitHub,Git Handbook (https://docs.github.com/en/get-started/using-git); Learn Git Branching (https://learngitbranching.js.org/),Create a repo, clone it, create branches, merge, resolve conflict, push PR.,
-2,OOP & SOLID Principles,SOLID Explained (https://www.freecodecamp.org/news/solid-principles-explained-in-python/),Build a class-based library system using OOP and apply SOLID principles.,
-3,Design Patterns,Refactoring.Guru - Patterns (https://refactoring.guru/design-patterns); Python Design Patterns (https://python-patterns.guide/),Implement Singleton logger, Factory for notification sender.,
-4,REST APIs Basics,FastAPI Docs (https://fastapi.tiangolo.com/); REST Concepts (https://restfulapi.net/),Build a CRUD Book API (GET, POST, PUT, DELETE).,
-5,API Design Best Practices,Best Practices (https://restfulapi.net/best-practices/); Pagination in FastAPI (https://fastapi.tiangolo.com/advanced/pagination/),Add pagination, error handling, and query parameters to your API.,
-6,API Testing (Unit + Integration),Pytest Tutorial (https://docs.pytest.org/en/stable/); API Testing with Pytest (https://fastapi.tiangolo.com/tutorial/testing/),Write unit tests for each endpoint with mocked DB responses and integration tests using TestClient.,
-7,Debugging & Logging,Python Logging Docs (https://docs.python.org/3/library/logging.html); pdb Debugger (https://docs.python.org/3/library/pdb.html),Add logging with levels, and use pdb to debug a bug in API.,
