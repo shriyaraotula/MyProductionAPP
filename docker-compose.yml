@@ -25,15 +25,15 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - DATABASE_URL=postgresql://postgres:Plmoknijb1234@postgres:5432/myappdb
-      - ENABLE_KAFKA=0
-      - ENVIRONMENT=production
-      - SECRET_KEY=production_secret_key
-      - DB_HOST=postgres
-      - DB_PORT=5432
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=Plmoknijb1234
-      - POSTGRES_DB=myappdb
+      DATABASE_URL: "postgresql://postgres:Plmoknijb1234@postgres:5432/myappdb"
+      ENABLE_KAFKA: "0"
+      ENVIRONMENT: production
+      SECRET_KEY: production_secret_key
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: Plmoknijb1234
+      POSTGRES_DB: myappdb
     command: sh -c "sleep 10 && uvicorn MyProductionAPP.main:app --host 0.0.0.0 --port 8000"
 
   proxy:
