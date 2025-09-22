@@ -1,0 +1,18 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: myproductionapp-migrate
+  namespace: myproductionapp
+spec:
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: migrate
+          image: "${IMAGE_URI:-<ACCOUNT_ID>.dkr.ecr.<REGION>.amazonaws.com/myproductionapp:${GIT_SHA:-latest}}"
+          envFrom:
+            - secretRef:
+                name: myproductionapp-secret
+            - configMapRef:
+                name: myproductionapp-config
+          command: ["/bin/sh","-c","python -m MyProductionAPP.scripts.run_migrations || exit 1"]
